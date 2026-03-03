@@ -896,11 +896,11 @@
                             <div class="bg-gradient-to-r from-brand-50 to-blue-50 border border-brand-200 rounded-xl p-5 md:p-6 flex flex-col md:flex-row items-center justify-between shadow-sm relative overflow-hidden">
                                 <div class="absolute -right-4 -top-4 text-brand-100 opacity-50 hidden md:block"><i class="fa-solid fa-robot text-9xl"></i></div>
                                 <div class="relative z-10 text-center md:text-left mb-4 md:mb-0 w-full md:w-auto">
-                                    <h3 class="font-bold text-brand-900 text-lg flex items-center justify-center md:justify-start"><i class="fa-solid fa-wand-magic-sparkles text-brand-600 mr-2"></i> Preencher com IA</h3>
-                                    <p class="text-sm text-brand-800 mt-1 max-w-lg">Cole o texto do anúncio e a IA preencherá os campos abaixo magicamente!</p>
+                                    <h3 class="font-bold text-brand-900 text-lg flex items-center justify-center md:justify-start"><i class="fa-solid fa-wand-magic-sparkles text-brand-600 mr-2"></i> Importação por Regras</h3>
+                                    <p class="text-sm text-brand-800 mt-1 max-w-lg">Cole o link do anúncio (ou HTML) e o sistema preenche os campos por regras de extração.</p>
                                 </div>
                                 <button type="button" onclick="app.openAIModal()" class="relative z-10 w-full md:w-auto bg-brand-600 active:bg-brand-700 md:hover:bg-brand-700 text-white font-bold py-3 md:py-3 px-6 rounded-lg shadow-md transition-all md:hover:scale-105 flex items-center justify-center whitespace-nowrap">
-                                    <i class="fa-solid fa-robot mr-2"></i> Usar IA Agora
+                                    <i class="fa-solid fa-robot mr-2"></i> Importar anúncio
                                 </button>
                             </div>
 
@@ -1403,50 +1403,122 @@
                 return parseFloat(cleaned);
             },
 
+            sanitizeField(value, max = 120) {
+                if (!value) return null;
+                const cleaned = String(value).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                if (!cleaned) return null;
+                return cleaned.slice(0, max).trim();
+            },
+
             firstMatch(text, regexes) {
                 for (const re of regexes) {
                     const m = text.match(re);
-                    if (m && m[1]) return m[1].trim();
+                    if (m && m[1]) return this.sanitizeField(m[1]);
                 }
                 return null;
             },
 
+            extractNeighborhoodByKeyword(rawText) {
+                const lines = (rawText || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+                for (const line of lines) {
+                    const m = line.match(/\bBairro\b\s*[:\-]?\s*([^,\.\-|\n\/]{2,60}?)(?=\s+(?:em|no|na|com|para)\b|[,\.\-|\n\/]|$)/i);
+                    if (m && m[1]) return this.sanitizeField(m[1], 60);
+                }
+                const fallback = (rawText || '').match(/\bBairro\b\s*[:\-]?\s*([^,\.\-|\n\/]{2,60}?)(?=\s+(?:em|no|na|com|para)\b|[,\.\-|\n\/]|$)/i);
+                return fallback ? this.sanitizeField(fallback[1], 60) : null;
+            },
+
+            parseAddressSection(rawText) {
+                const text = rawText || '';
+                const addressBlockMatch = text.match(/\bEndere[çc]o\b\s*[\r\n:]*\s*([^\n]{6,140})/i);
+                const line = addressBlockMatch?.[1] ? addressBlockMatch[1].trim() : null;
+                if (!line) return { address: null, neighborhood: null, city: null };
+
+                let address = this.sanitizeField(line, 140);
+                let neighborhood = null;
+                let city = null;
+
+                const full = line.match(/^([^,]+),\s*([^\-]+)\s*-\s*([A-Za-zÀ-ÿ\s]{2,50})(?:\/[A-Z]{2})?$/);
+                if (full) {
+                    address = this.sanitizeField(full[1], 120);
+                    neighborhood = this.sanitizeField(full[2], 60);
+                    city = this.sanitizeField(full[3], 60);
+                } else {
+                    const cityMatch = line.match(/-\s*([A-Za-zÀ-ÿ\s]{2,50})(?:\/[A-Z]{2})?$/);
+                    if (cityMatch) city = this.sanitizeField(cityMatch[1], 60);
+                    const neighborhoodMatch = line.match(/,\s*([^\-]+)(?:\s*-|$)/);
+                    if (neighborhoodMatch) neighborhood = this.sanitizeField(neighborhoodMatch[1], 60);
+                }
+
+                return { address, neighborhood, city };
+            },
+
             extractDataFromRawListing(rawText, sourceUrl = '') {
-                const text = (rawText || '').replace(/\s+/g, ' ').trim();
-                const title = this.firstMatch(text, [
+                const raw = rawText || '';
+                const text = raw.replace(/\s+/g, ' ').trim();
+
+                const title = this.firstMatch(raw, [
+                    /(Apartamento\s+no\s+Bairro[^\n]{8,160})/i,
                     /<title[^>]*>([^<]+)<\/title>/i,
                     /property=["']og:title["'][^>]*content=["']([^"']+)["']/i,
-                    /h1[^>]*>([^<]{10,120})<\/h1>/i
+                    /h1[^>]*>([^<]{10,160})<\/h1>/i
                 ]) || 'Apartamento';
 
                 const priceRaw = this.firstMatch(text, [
-                    /(?:R\$\s?)([\d\.]{3,}(?:,\d{2})?)/i,
-                    /(?:preço|valor)\s*[:\-]?\s*(?:R\$\s?)?([\d\.]{3,}(?:,\d{2})?)/i
+                    /R\$\s*([\d\.]{3,}(?:,\d{2})?)/i,
+                    /\bValor\b\s*[:\-]?\s*R\$\s*([\d\.]{3,}(?:,\d{2})?)/i
+                ]);
+                const condoRaw = this.firstMatch(text, [
+                    /(?:COND\.?|condom[íi]nio)\s*R?\$?\s*([\d\.]+(?:,\d{2})?)/i
+                ]);
+                const iptuRaw = this.firstMatch(text, [
+                    /IPTU\s*R?\$?\s*([\d\.]+(?:,\d{2})?)/i
                 ]);
                 const areaRaw = this.firstMatch(text, [
-                    /([\d]{2,4}[\.,]?\d{0,2})\s?m²/i,
-                    /(?:área|area)\s*(?:útil|privativa|total)?\s*[:\-]?\s*([\d]{2,4}[\.,]?\d{0,2})/i
+                    /([\d]{2,4}[\.,]?\d{0,2})\s*m²\s*\(útil\)/i,
+                    /[ÁA]rea\s*[úu]til\s*[:\-]?\s*([\d]{2,4}[\.,]?\d{0,2})\s*m²/i,
+                    /([\d]{2,4}[\.,]?\d{0,2})\s*m²/i
                 ]);
                 const bedroomsRaw = this.firstMatch(text, [
                     /(\d{1,2})\s*(?:quartos?|dormit[óo]rios?)/i,
                     /(?:quartos?|dormit[óo]rios?)\s*[:\-]?\s*(\d{1,2})/i
                 ]);
-                const condoRaw = this.firstMatch(text, [/condom[íi]nio\s*[:\-]?\s*(?:R\$\s?)?([\d\.]+(?:,\d{2})?)/i]);
-                const iptuRaw = this.firstMatch(text, [/iptu\s*[:\-]?\s*(?:R\$\s?)?([\d\.]+(?:,\d{2})?)/i]);
-                const neighborhood = this.firstMatch(text, [/bairro\s*[:\-]?\s*([A-Za-zÀ-ÿ0-9\-\s]{2,60}?)(?=\s*(?:cidade|endere|cep|valor|preço|$))/i]);
-                const city = this.firstMatch(text, [/cidade\s*[:\-]?\s*([A-Za-zÀ-ÿ0-9\-\s]{2,60}?)(?=\s*(?:bairro|endere|cep|valor|preço|$))/i]);
-                const address = this.firstMatch(text, [/endere[çc]o\s*[:\-]?\s*([^<\n]{8,140}?)(?=\s*(?:andar|bairro|cidade|cep|valor|preço|$))/i]);
-                const floor = this.firstMatch(text, [/(\d{1,2}º\s*andar|t[ée]rreo|cobertura)/i]);
-                const sunOrientation = this.firstMatch(text, [/(nascente|poente|face\s*norte|face\s*sul|norte|sul|leste|oeste)/i]);
-                const building = this.firstMatch(text, [/edif[íi]cio\s*[:\-]?\s*([A-Za-zÀ-ÿ0-9\-\s]{3,80})/i, /residencial\s*([A-Za-zÀ-ÿ0-9\-\s]{3,80})/i]);
-                const photo = this.firstMatch(text, [/property=[\"']og:image[\"'][^>]*content=[\"']([^\"']+)[\"']/i, /<img[^>]+src=[\"']([^\"']+)[\"']/i]);
-                const notes = this.firstMatch(text, [
+
+                const neighborhoodByKeyword = this.extractNeighborhoodByKeyword(raw);
+                const addressData = this.parseAddressSection(raw);
+
+                const neighborhood = neighborhoodByKeyword || addressData.neighborhood;
+
+                let city = addressData.city
+                    || this.firstMatch(raw, [/\bem\s+([A-Za-zÀ-ÿ\s]{2,60})(?:\/[A-Z]{2})?\b/i])
+                    || this.firstMatch(raw, [/\b([A-Za-zÀ-ÿ\s]{2,60})\/[A-Z]{2}\b/]);
+
+                if (city && city.toLowerCase().startsWith('bairro ')) city = null;
+
+                const building = this.firstMatch(raw, [
+                    /\bEdif[íi]cio\b\s*[:\-]?\s*([^\n,\.|]{3,80})/i,
+                    /\bResidencial\b\s*[:\-]?\s*([^\n,\.|]{3,80})/i,
+                    /\bCondom[íi]nio\b\s*[:\-]?\s*([^\n,\.|]{3,80})/i
+                ]);
+
+                const address = addressData.address || this.firstMatch(raw, [
+                    /\b(Rua|R\.|Avenida|Av\.|Travessa|Alameda)\s+[^\n,]{3,120}/i
+                ]);
+
+                const floor = this.firstMatch(text, [/\b(\d{1,2}º\s*andar|t[ée]rreo|cobertura)\b/i]);
+                const sunOrientation = this.firstMatch(text, [/(sol\s+da\s+manhã|sol\s+da\s+tarde|nascente|poente|face\s*norte|face\s*sul|norte|sul|leste|oeste)/i]);
+                const photo = this.firstMatch(raw, [
+                    /property=["']og:image["'][^>]*content=["']([^"']+)["']/i,
+                    /<img[^>]+src=["']([^"']+)["']/i
+                ]);
+                const notes = this.firstMatch(raw, [
+                    /\bSobre o imóvel\b([\s\S]{40,500})/i,
                     /property=["']og:description["'][^>]*content=["']([^"']{20,300})["']/i,
                     /<meta[^>]*name=["']description["'][^>]*content=["']([^"']{20,300})["']/i
-                ]) || text.slice(0, 280);
+                ]) || this.sanitizeField(text.slice(0, 280), 280);
 
                 return {
-                    title: title.replace(/<[^>]*>/g, '').trim(),
+                    title,
                     price: this.parsePtBrNumber(priceRaw),
                     area: this.parsePtBrNumber(areaRaw),
                     condo: this.parsePtBrNumber(condoRaw),
