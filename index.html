@@ -13,16 +13,16 @@
                 extend: {
                     colors: {
                         brand: {
-                            50: '#ecfdf5',
-                            100: '#d1fae5',
-                            200: '#a7f3d0',
-                            300: '#6ee7b7',
-                            400: '#34d399',
-                            500: '#10b981',
-                            600: '#059669', /* Verde Esmeralda/Teal */
-                            700: '#047857',
-                            800: '#065f46',
-                            900: '#064e3b',
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            200: '#bfdbfe',
+                            300: '#93c5fd',
+                            400: '#60a5fa',
+                            500: '#3b82f6',
+                            600: '#2563eb', /* Azul principal */
+                            700: '#1d4ed8',
+                            800: '#1e40af',
+                            900: '#1e3a8a',
                         }
                     }
                 }
@@ -68,12 +68,16 @@
         .overflow-x-auto { -webkit-overflow-scrolling: touch; }
 
         /* Kanban Columns drag visual */
-        .kanban-col.drag-over { background-color: #f1f5f9; border-color: #10b981; border-style: dashed; }
+        .kanban-col.drag-over { background-color: #eff6ff; border-color: #2563eb; border-style: dashed; }
+        .skip-link { position: absolute; top: -40px; left: 1rem; z-index: 60; background: #1d4ed8; color: white; padding: 0.5rem 0.75rem; border-radius: 0.5rem; font-weight: 600; transition: top 0.2s ease; }
+        .skip-link:focus { top: 1rem; }
+        button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
         .kanban-card { cursor: grab; }
         .kanban-card:active { cursor: grabbing; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col pb-20 md:pb-0">
+    <a href="#main-content" class="skip-link">Pular para o conteúdo principal</a>
 
     <!-- Navbar Superior -->
     <nav class="bg-brand-700 text-white shadow-lg sticky top-0 z-50">
@@ -151,6 +155,10 @@
         </div>
     </div>
 
+    <button id="scroll-top-btn" type="button" aria-label="Voltar ao topo" class="fixed bottom-24 md:bottom-6 right-4 z-40 bg-brand-600 hover:bg-brand-700 text-white w-11 h-11 rounded-full shadow-lg hidden items-center justify-center transition">
+        <i class="fa-solid fa-arrow-up"></i>
+    </button>
+
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -185,6 +193,27 @@
             async init() {
                 await this.loadData();
                 this.navigate('list');
+                this.initGlobalUX();
+            },
+
+
+            initGlobalUX() {
+                const scrollTopBtn = document.getElementById('scroll-top-btn');
+                const toggleScrollTop = () => {
+                    if (!scrollTopBtn) return;
+                    const shouldShow = window.scrollY > 250;
+                    scrollTopBtn.classList.toggle('hidden', !shouldShow);
+                    scrollTopBtn.classList.toggle('flex', shouldShow);
+                };
+
+                window.addEventListener('scroll', toggleScrollTop, { passive: true });
+                toggleScrollTop();
+
+                if (scrollTopBtn) {
+                    scrollTopBtn.addEventListener('click', () => {
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                    });
+                }
             },
 
             async loadData() {
@@ -293,7 +322,7 @@
                     case 'Novo': return 'bg-blue-100 text-blue-700 border-blue-200';
                     case 'Visita Agendada': return 'bg-amber-100 text-amber-700 border-amber-200';
                     case 'Visitado': return 'bg-purple-100 text-purple-700 border-purple-200';
-                    case 'Proposta': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+                    case 'Proposta': return 'bg-brand-100 text-brand-700 border-brand-200';
                     case 'Descartado': return 'bg-slate-200 text-slate-500 border-slate-300';
                     default: return 'bg-gray-100 text-gray-700';
                 }
@@ -789,7 +818,7 @@
                             <span class="text-[9px] uppercase text-slate-500 font-bold mt-1">Gastronomia</span>
                         </div>
                         <div class="bg-slate-50 border border-slate-100 rounded-lg p-2 text-center flex flex-col justify-center items-center">
-                            <i class="fa-solid fa-tree text-emerald-500 mb-1 text-lg"></i>
+                            <i class="fa-solid fa-tree text-brand-500 mb-1 text-lg"></i>
                             <span class="font-bold text-slate-800 text-lg leading-none">${counts.saudeLazer}</span>
                             <span class="text-[9px] uppercase text-slate-500 font-bold mt-1">Parques/Saúde</span>
                         </div>
@@ -831,13 +860,13 @@
                         <form id="apt-form" class="p-4 md:p-8 space-y-8" onsubmit="event.preventDefault(); app.saveApartment();">
                             
                             <!-- SEÇÃO IA -->
-                            <div class="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-5 md:p-6 flex flex-col md:flex-row items-center justify-between shadow-sm relative overflow-hidden">
-                                <div class="absolute -right-4 -top-4 text-emerald-100 opacity-50 hidden md:block"><i class="fa-solid fa-robot text-9xl"></i></div>
+                            <div class="bg-gradient-to-r from-brand-50 to-blue-50 border border-brand-200 rounded-xl p-5 md:p-6 flex flex-col md:flex-row items-center justify-between shadow-sm relative overflow-hidden">
+                                <div class="absolute -right-4 -top-4 text-brand-100 opacity-50 hidden md:block"><i class="fa-solid fa-robot text-9xl"></i></div>
                                 <div class="relative z-10 text-center md:text-left mb-4 md:mb-0 w-full md:w-auto">
-                                    <h3 class="font-bold text-emerald-900 text-lg flex items-center justify-center md:justify-start"><i class="fa-solid fa-wand-magic-sparkles text-emerald-600 mr-2"></i> Preencher com IA</h3>
-                                    <p class="text-sm text-emerald-800 mt-1 max-w-lg">Cole o texto do anúncio e a IA preencherá os campos abaixo magicamente!</p>
+                                    <h3 class="font-bold text-brand-900 text-lg flex items-center justify-center md:justify-start"><i class="fa-solid fa-wand-magic-sparkles text-brand-600 mr-2"></i> Preencher com IA</h3>
+                                    <p class="text-sm text-brand-800 mt-1 max-w-lg">Cole o texto do anúncio e a IA preencherá os campos abaixo magicamente!</p>
                                 </div>
-                                <button type="button" onclick="app.openAIModal()" class="relative z-10 w-full md:w-auto bg-emerald-600 active:bg-emerald-700 md:hover:bg-emerald-700 text-white font-bold py-3 md:py-3 px-6 rounded-lg shadow-md transition-all md:hover:scale-105 flex items-center justify-center whitespace-nowrap">
+                                <button type="button" onclick="app.openAIModal()" class="relative z-10 w-full md:w-auto bg-brand-600 active:bg-brand-700 md:hover:bg-brand-700 text-white font-bold py-3 md:py-3 px-6 rounded-lg shadow-md transition-all md:hover:scale-105 flex items-center justify-center whitespace-nowrap">
                                     <i class="fa-solid fa-robot mr-2"></i> Usar IA Agora
                                 </button>
                             </div>
@@ -1305,7 +1334,7 @@
                 const { value: text } = await Swal.fire({
                     title: '<i class="fa-solid fa-wand-magic-sparkles text-brand-600"></i> Extração com IA',
                     html: '<p class="text-sm text-slate-600 mb-2">Cole aqui abaixo todo o conteúdo que você copiou do anúncio.</p><textarea id="ai-text-input" class="w-full h-48 p-3 border border-slate-300 rounded-lg focus:ring-brand-500 focus:border-brand-500 outline-none resize-none text-sm" placeholder="Ex: Apartamento no Bairro Centro em Timbó com 3 Dormitórios..."></textarea>',
-                    showCancelButton: true, confirmButtonText: 'Extrair', cancelButtonText: 'Cancelar', confirmButtonColor: '#059669',
+                    showCancelButton: true, confirmButtonText: 'Extrair', cancelButtonText: 'Cancelar', confirmButtonColor: '#2563eb',
                     preConfirm: () => document.getElementById('ai-text-input').value || Swal.showValidationMessage('Cole algum texto.')
                 });
                 if (text) this.processWithAI(text);
